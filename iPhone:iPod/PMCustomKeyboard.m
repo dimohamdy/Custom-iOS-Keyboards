@@ -7,7 +7,6 @@
 //
 
 #import "PMCustomKeyboard.h"
-
 #define kFont [UIFont fontWithName:@"GurmukhiMN" size:22]
 #define kAltLabel @"੧੨੩"
 #define kReturnLabel @"ਨਵੀਂ ਪੰਕਤੀ"
@@ -24,13 +23,19 @@ enum {
 };
 
 @interface PMCustomKeyboard ()
-
 @property (nonatomic, assign, getter=isShifted) BOOL shifted;
 
 @end
 
-@implementation PMCustomKeyboard
+@implementation PMCustomKeyboard{
+    
+    AVAudioRecorder *recorder;
+    AVAudioPlayer *player;
+    
+}
 @synthesize textView = _textView;
+@synthesize characterKeys;
+@synthesize stopButton, playButton, recordPauseButton;
 
 - (id)init {
 	UIDeviceOrientation orientation = [[UIDevice currentDevice] orientation];
@@ -96,16 +101,16 @@ enum {
 	if ([textView isKindOfClass:[UITextView class]]) {
         [(UITextView *)textView setInputView:self];
         /*[[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(checkShouldEnableReturnButton:)
-                                                     name:UITextViewTextDidChangeNotification
-                                                   object:textView];*/
+         selector:@selector(checkShouldEnableReturnButton:)
+         name:UITextViewTextDidChangeNotification
+         object:textView];*/
     }
     else if ([textView isKindOfClass:[UITextField class]]) {
         [(UITextField *)textView setInputView:self];
         /*[[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(checkShouldEnableReturnButton:)
-                                                     name:UITextFieldTextDidChangeNotification
-                                                   object:textView];*/
+         selector:@selector(checkShouldEnableReturnButton:)
+         name:UITextFieldTextDidChangeNotification
+         object:textView];*/
     }
     
     _textView = textView;
@@ -147,8 +152,12 @@ enum {
 }
 
 -(void)loadCharactersWithArray:(NSArray *)a {
-	int i = 0;
+    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(buttonLongPressed:)];
+    longPress.minimumPressDuration = 0.5;
+    int i = 0;
+    //add GestureRecongnizer for buttton to begin record sound of the button
 	for (UIButton *b in self.characterKeys) {
+        [b addGestureRecognizer:longPress];
 		[b setTitle:[a objectAtIndex:i] forState:UIControlStateNormal];
 		if ([b.titleLabel.text characterAtIndex:0] < 128 && ![[b.titleLabel.text substringToIndex:1] isEqualToString:@"◌"])
 			[b.titleLabel setFont:[UIFont systemFontOfSize:22]];
@@ -210,6 +219,8 @@ enum {
 		[[NSNotificationCenter defaultCenter] postNotificationName:UITextFieldTextDidChangeNotification object:self.textView];
 }
 
+
+
 - (IBAction)altPressed:(id)sender {
     [[UIDevice currentDevice] playInputClick];
 	[self.shiftButton setBackgroundImage:nil forState:UIControlStateNormal];
@@ -236,7 +247,17 @@ enum {
 	else if ([self.textView isKindOfClass:[UITextField class]])
 		[[NSNotificationCenter defaultCenter] postNotificationName:UITextFieldTextDidChangeNotification object:self.textView];
 }
-
+-(NSString*)getCharacterFromSender:(id)sender{
+    UIButton *button = (UIButton *)sender;
+	NSString *character = [NSString stringWithString:button.titleLabel.text];
+	
+	if ([[character substringToIndex:1] isEqualToString:@"◌"])
+		character = [character substringFromIndex:1];
+	
+	else if ([[character substringFromIndex:character.length - 1] isEqualToString:@"◌"])
+		character = [character substringToIndex:character.length - 1];
+    return character;
+}
 - (IBAction)characterPressed:(id)sender {
 	UIButton *button = (UIButton *)sender;
 	NSString *character = [NSString stringWithString:button.titleLabel.text];
@@ -246,7 +267,6 @@ enum {
 	
 	else if ([[character substringFromIndex:character.length - 1] isEqualToString:@"◌"])
 		character = [character substringToIndex:character.length - 1];
-	
 	[self.textView insertText:character];
     
 	if (self.isShifted)
@@ -308,11 +328,10 @@ enum {
     keyPop.layer.shadowOpacity = 0.30;
     keyPop.layer.shadowRadius = 3.0;
     keyPop.clipsToBounds = NO;
-    
     [keyPop addSubview:text];
     [b addSubview:keyPop];
 }
-
+//after began we will prepare the recorder to record the void and begin it to record
 - (void)touchesBegan: (NSSet *)touches withEvent: (UIEvent *)event {
     CGPoint location = [[touches anyObject] locationInView:self];
     
@@ -322,7 +341,18 @@ enum {
         }
         if(CGRectContainsPoint(b.frame, location))
         {
+            
             [self addPopupToButton:b];
+            //            [[self getCharacterFromSender:b];
+            //prepare file for save
+            if([self isFileExitOFCharacter:[self getCharacterFromSender:b]]){
+                [self play];
+            }else{
+                [self prepareRecordWithFileName:[self getCharacterFromSender:b]];
+                //begin record the sound of the button
+                [self record];
+            }
+            
             [[UIDevice currentDevice] playInputClick];
         }
     }
@@ -352,9 +382,12 @@ enum {
         }
         if(CGRectContainsPoint(b.frame, location))
         {
+            [self stop];
+            
             [self characterPressed:b];
         }
     }
+    
 }
 
 /* UI Utilities */
@@ -734,5 +767,173 @@ enum {
 }
 
 
+
+//- (IBAction)Record:(id)sender {
+//    objRecordAudioViewController=[[RecordAudioViewController alloc]init];
+//    [objRecordAudioViewController recordPauseTapped:sender];
+//}
+//
+//- (IBAction)Play:(id)sender {
+//    objRecordAudioViewController=[[RecordAudioViewController alloc]init];
+//    [objRecordAudioViewController playTapped:sender];
+//}
+//
+//- (IBAction)Stop:(id)sender {
+//    objRecordAudioViewController=[[RecordAudioViewController alloc]init];
+//    [objRecordAudioViewController stopTapped:sender];
+//}
+
+//- (IBAction)testtest:(id)sender {
+//    NSLog(@"test");
+//}
+- (void)test{
+    NSLog(@"test");
+}
+- (IBAction)recordPauseTapped:(id)sender {
+    // Stop the audio player before recording
+    if (player.playing) {
+        [player stop];
+    }
+    
+    if (!recorder.recording) {
+        AVAudioSession *session = [AVAudioSession sharedInstance];
+        [session setActive:YES error:nil];
+        
+        // Start recording
+        [recorder record];
+        [recordPauseButton setTitle:@"Pause" forState:UIControlStateNormal];
+        
+    } else {
+        
+        // Pause recording
+        [recorder pause];
+        [recordPauseButton setTitle:@"Record" forState:UIControlStateNormal];
+    }
+    
+    [stopButton setEnabled:YES];
+    [playButton setEnabled:NO];
+}
+-(void)record{
+    // Stop the audio player before recording
+    if (player.playing) {
+        [player stop];
+    }
+    
+    if (!recorder.recording) {
+        AVAudioSession *session = [AVAudioSession sharedInstance];
+        [session setActive:YES error:nil];
+        
+        // Start recording
+        [recorder record];
+        [recordPauseButton setTitle:@"Pause" forState:UIControlStateNormal];
+        
+    } else {
+        
+        // Pause recording
+        [recorder pause];
+        [recordPauseButton setTitle:@"Record" forState:UIControlStateNormal];
+    }
+    
+    [stopButton setEnabled:YES];
+    [playButton setEnabled:NO];
+}
+- (IBAction)stopTapped:(id)sender {
+    [recorder stop];
+    
+    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+    [audioSession setActive:NO error:nil];
+}
+-(void)stop{
+    [recorder stop];
+    
+    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+    [audioSession setActive:NO error:nil];
+    
+}
+- (IBAction)playTapped:(id)sender {
+    
+    if (!recorder.recording){
+        player = [[AVAudioPlayer alloc] initWithContentsOfURL:recorder.url error:nil];
+        [player setDelegate:self];
+        [player play];
+    }
+}
+-(void)play{
+    if (!recorder.recording){
+        player = [[AVAudioPlayer alloc] initWithContentsOfURL:recorder.url error:nil];
+        [player setDelegate:self];
+        [player play];
+    }
+    
+}
+
+#pragma mark - AVAudioRecorderDelegate
+
+- (void) audioRecorderDidFinishRecording:(AVAudioRecorder *)avrecorder successfully:(BOOL)flag{
+    [recordPauseButton setTitle:@"Record" forState:UIControlStateNormal];
+    [stopButton setEnabled:NO];
+    [playButton setEnabled:YES];
+}
+
+#pragma mark - AVAudioPlayerDelegate
+
+- (void) audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag{
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle: @"Done"
+                                                    message: @"Finish playing the recording!"
+                                                   delegate: nil
+                                          cancelButtonTitle:@"OK"
+                                          otherButtonTitles:nil];
+    [alert show];
+}
+-(BOOL)isFileExitOFCharacter:(NSString*)character{
+    NSString* documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+    //... gives you the path to the documents directory. The following checks if there's a file named foo.html:
+    
+    NSString* foofile = [documentsPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.M4a",character]];
+    BOOL fileExists = [[NSFileManager defaultManager] fileExistsAtPath:foofile];
+    return fileExists;
+}
+-(void)prepareRecordWithFileName:(NSString*)character{
+    [stopButton setEnabled:NO];
+    [playButton setEnabled:NO];
+    //the pass that will save the file
+    NSArray *pathComponents = [NSArray arrayWithObjects:
+                               [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) lastObject],
+                               [NSString stringWithFormat:@"%@.M4a",character],
+                               nil];
+    
+    
+    //    NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+    //    NSString *directory = [documentsDirectory stringByAppendingPathComponent:
+    //                           [NSString stringWithFormat:@"%@/%@",@"Ahmady",@"Images"] ];
+    
+    
+    NSURL *outputFileURL = [NSURL fileURLWithPathComponents:pathComponents];
+    
+    // Setup audio session
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    [session setCategory:AVAudioSessionCategoryPlayAndRecord error:nil];
+    
+    // Define the recorder setting
+    NSMutableDictionary *recordSetting = [[NSMutableDictionary alloc] init];
+    
+    [recordSetting setValue:[NSNumber numberWithInt:kAudioFormatMPEG4AAC] forKey:AVFormatIDKey];
+    [recordSetting setValue:[NSNumber numberWithFloat:44100.0] forKey:AVSampleRateKey];
+    [recordSetting setValue:[NSNumber numberWithInt: 2] forKey:AVNumberOfChannelsKey];
+    
+    // Initiate and prepare the recorder
+    recorder = [[AVAudioRecorder alloc] initWithURL:outputFileURL settings:recordSetting error:nil];
+    recorder.delegate = self;
+    recorder.meteringEnabled = YES;
+    [recorder prepareToRecord];
+    
+}
+- (void)buttonLongPressed:(UILongPressGestureRecognizer *)sender
+{
+    if(sender.state == UIGestureRecognizerStateBegan)
+    {
+        
+    }
+}
 @end
 
